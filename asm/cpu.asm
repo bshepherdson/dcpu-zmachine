@@ -276,6 +276,17 @@ ifc a, 0xfffe ; Only bit 1 is set, if any.
 ; Main case: PC = PC + offset - 2
 ; Can't handle 2s complement properly here.
 sub a, 2
+set pc, branch_signed ; Tail call.
+
+; Return false or true; A holds 0 or 1.
+:L52
+jsr zreturn
+set pc, pop
+
+; A is a 16-bit signed offset to apply to the PC.
+; This logic is tricky, and its used in zbranch and elsewhere, so it gets a
+; function.
+:branch_signed ; (signed_delta) -> void
 ifu a, 0
   set pc, L55
 
@@ -290,13 +301,7 @@ xor a, -1
 add a, 1 ; Negate A to produce the positive equivalent.
 sub [zpc+1], a
 add [zpc], ex  ; Yes, add. EX is -1 when there's a borrow.
-set pc, L56
-
-
-; Return false or true; A holds 0 or 1.
-:L52
-jsr zreturn
-; Fall through to L56, for return.
+; Fall through to L56 for return.
 
 :L56
 set pc, pop
@@ -430,12 +435,18 @@ jsr zstore
 set pc, pop
 
 
+:str_illegal_opcode .asciiz "[Illegal opcode]"
 
 
 ; TODO Actually implement and move these.
 :ops_var DAT 0
 :ops_2op DAT 0
-:ops_1op DAT 0
-:ops_0op DAT 0
 :ops_extended DAT 0
+
+
+; TODO Move the load-from-disk code over here from main.
+; This is called when the Z-machine is ordered to restart, for example.
+; Needs to (re)load the dynamic memory, set the header accordingly, etc.
+:zrestart
+sub pc, 1
 

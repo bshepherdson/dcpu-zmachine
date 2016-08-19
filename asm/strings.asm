@@ -188,10 +188,38 @@ set pc, zstr_main
 
 :print_paddr ; (pa) -> void
 jsr pa_la ; A:B is now the address.
+set pc, print_la
+
+; Prints from the current PC forward, advancing the PC to after the word.
+:print_pc ; () -> void
+set a, [zpc]
+set b, [zpc+1]
+jsr print_la
+
+; zstr_ptr is now aimed at the last word, the one with the top bit set.
+set a, [zstr_ptr]
+set b, [zstr_ptr+1]
+add b, 2
+add a, ex
+set [zpc], a
+set [zpc+1], b
+set pc, pop
+
+:print_ba ; (ba) -> void
+; Convert the byte address in A to a long address in A:B; high portion is 0
+set b, a
+set a, 0
+set pc, print_la
+
+
+; Prints the string from
+:print_la ; (hi, lo) -> void
 set [zstr_ptr], a
 set [zstr_ptr+1], b
 set [zstr_index], 0 ; This will cause zstr_next to read the string properly.
 set [zstr_word], 0  ; Gotta make sure the top bit is clear.
 set [shift], 0
 set pc, zstr_main
+
+:print_pc
 

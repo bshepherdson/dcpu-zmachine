@@ -1,7 +1,10 @@
 .include asm/core.asm
 .include asm/memory.asm
 .include asm/cpu.asm
+.include asm/0op.asm
+.include asm/1op.asm
 .include asm/strings.asm
+.include asm/objects.asm
 .include asm/screen.asm
 
 :hw_display dat 0
