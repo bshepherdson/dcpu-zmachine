@@ -69,12 +69,14 @@ ife [zstr_depth], 0
 set a, [zstr_depth]
 sub a, 1
 shl a, 2   ; Turn the index (eg. 1, 2) into an offset (0, 4)
+add a, zstr_stack
 
 set [zstr_ptr], [a]
 set [zstr_ptr+1], [a+1]
 set [zstr_word], [a+2]
 set [zstr_index], [a+3]
 sub [zstr_depth], 1
+set [shift], 0
 set pc, zstr_next
 
 :L82
@@ -130,7 +132,7 @@ set pc, zstr_main
 :alphabets DAT alphabet0, alphabet1, alphabet2
 :alphabet0 DAT "abcdefghijklmnopqrstuvwxyz"
 :alphabet1 DAT "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-:alphabet2 DAT 0, 13, "0123456789.,!?_#'", 34, "/\-:()"
+:alphabet2 DAT 0, 0x13, "0123456789.,!?_#'", 34, "/\\-:()"
 
 
 ; TODO If I care about V1 and 2, fix these.
@@ -165,6 +167,7 @@ jsr wa_la   ; A:B is now the long address.
 ; Push onto the stack.
 set c, [zstr_depth]
 shl c, 2
+add c, zstr_stack
 set [c],   [zstr_ptr]
 set [c+1], [zstr_ptr+1]
 set [c+2], [zstr_word]
@@ -189,5 +192,6 @@ set [zstr_ptr], a
 set [zstr_ptr+1], b
 set [zstr_index], 0 ; This will cause zstr_next to read the string properly.
 set [zstr_word], 0  ; Gotta make sure the top bit is clear.
+set [shift], 0
 set pc, zstr_main
 

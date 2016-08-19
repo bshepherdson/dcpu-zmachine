@@ -1,8 +1,13 @@
 ; Hobo version, for testing the string parsers.
 
 ; 386 words for the video memory.
+.def screen_cols, 32
+.def screen_row_shift, 5
+.def screen_rows, 12
+.def vram_size, screen_cols * screen_rows ; 32 * 12 = 386 words.
+
 :vram
-.reserve 386
+.reserve vram_size
 :vram_top
 
 .def green_on_black, 0xa000
@@ -24,7 +29,7 @@ set pc, pop
 ife a, 0x13
   set pc, new_line
 set b, [cursor_row]
-shl b, 5 ; 32 characters per row.
+shl b, screen_row_shift ; 32 characters per row.
 add b, [cursor_col]
 add b, vram
 bor a, green_on_black
@@ -32,7 +37,7 @@ set [b], a
 
 set b, [cursor_col]
 add b, 1
-ife b, 32
+ife b, screen_cols
   set pc, new_line ; Tail call to new_line.
 set [cursor_col], b
 set pc, pop
@@ -75,12 +80,13 @@ add a, 1
 ife a, 12
   set pc, scroll     ; Tail call to scroll. Leaves the cursor on this row.
 set [cursor_row], a
+set pc, pop
 
 
 ; Move everything up by a row.
 :scroll ; () -> void
-set a, vram + 32 ; Second line
-set b, vram      ; First line
-set c, 386       ; Size of VRAM
-set pc, move     ; Tail call to move()
+set a, vram + screen_cols ; Second line
+set b, vram               ; First line
+set c, vram_size          ; Size of VRAM
+set pc, move              ; Tail call to move()
 
