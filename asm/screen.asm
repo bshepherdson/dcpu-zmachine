@@ -71,6 +71,18 @@ set [cursor_row], 0
 set [cursor_col], 0
 set pc, pop
 
+; Erases a single line to black space.
+:clear_line ; (line) -> void
+shl a, screen_row_shift
+add a, vram
+set b, a
+add b, screen_cols
+:L95
+set [a], blank_space
+add a, 1
+ifl a, b
+  set pc, L95
+set pc, pop
 
 
 :new_line ; () -> void
@@ -87,6 +99,9 @@ set pc, pop
 :scroll ; () -> void
 set a, vram + screen_cols ; Second line
 set b, vram               ; First line
-set c, vram_size          ; Size of VRAM
-set pc, move              ; Tail call to move()
+set c, vram_size - screen_cols ; Size of VRAM, minus a line.
+jsr move
+; Now clear the last line.
+set a, screen_rows - 1
+set pc, clear_line ; Tail call to clear_line()
 
