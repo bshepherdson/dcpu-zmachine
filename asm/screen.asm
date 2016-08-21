@@ -59,6 +59,11 @@ set x, pop
 set pc, pop
 
 
+; Emits a signed, decimal number.
+:emit_number ; (num) -> void
+; START HERE
+
+
 ; Erases the screen to all black space.
 :clear_screen ; () -> void
 set a, vram

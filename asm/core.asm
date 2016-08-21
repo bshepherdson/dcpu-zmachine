@@ -70,5 +70,15 @@ set pc, pop
 .def header_abbreviations, 0x0018
 .def header_file_length,   0x001a
 .def header_checksum,      0x001c
-; TODO Finish up the header.
+.def header_interpreter_number, 0x001e
+.def header_interpreter_version, 0x001f
+.def header_screen_height_lines, 0x0020
+.def header_screen_width_chars, 0x0021
+.def header_screen_width_units, 0x0022
+.def header_screen_height_units, 0x0024
+.def header_font_width_units, 0x0026
+.def header_font_height_units, 0x0027
+.def header_default_bg_colour, 0x002c
+.def header_default_fg_colour, 0x002d
+.def header_standard_revision, 0x0032
 

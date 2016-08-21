@@ -4,6 +4,7 @@
 .include asm/0op.asm
 .include asm/1op.asm
 .include asm/2op.asm
+.include asm/var.asm
 .include asm/strings.asm
 .include asm/objects.asm
 .include asm/screen.asm
@@ -17,15 +18,7 @@ jsr detect_hardware
 jsr setup_interrupts
 jsr init_screen
 jsr await_disk_inserted
-; Load the dynamic and static memory regions at memory_base.
-jsr load_low_mem
-; Set the version
-set a, header_version
-jsr rbba
-set [version], a
-
-set pc, dump_all_strings
-
+set pc, zrestart
 
 
 :str_insert_disk .asciiz "Insert a story disk"
@@ -49,48 +42,6 @@ hwi [hw_disk]
 ife b, disk_state_no_media
   set pc, L100
 jsr clear_screen
-set pc, pop
-
-; Loads the first sector of memory at memory_base, then determines how many
-; more to load and loads those too.
-:load_low_mem ; () -> void
-set push, x
-set push, y
-set push, z
-set a, 2    ; READ
-set x, 0
-set y, memory_base
-hwi [hw_disk]
-jsr await_disk_ready
-
-; Now I can read the base of hi memory.
-; header_himem happens to be word-sized and even, fortunately.
-set z, header_himem
-shr z, 1
-add z, memory_base
-set z, [z]
-; Round that up to a full sector (in bytes).
-add z, 1023
-; And then truncate to a number of sectors, not bytes.
-shr z, 10
-
-; The first is already loaded, so we set X to 1.
-set x, 1
-:L202
-set a, 2    ; READ
-add y, sector_size
-hwi [hw_disk]
-jsr await_disk_ready
-
-add x, 1
-ife x, z ; We've read the last sector.
-  set pc, L203
-set pc, L202
-
-:L203 ; Done loading sectors.
-set z, pop
-set y, pop
-set x, pop
 set pc, pop
 
 
@@ -264,11 +215,12 @@ set pc, pop
 
 
 
-:await_any_key
+:await_any_key ; () -> key
 set a, 1 ; GET_NEXT
 hwi [hw_keyboard]
 ife c, 0
   set pc, await_any_key
+set a, c
 set pc, pop
 
 

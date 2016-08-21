@@ -16,7 +16,8 @@ dat op_quit
 dat op_new_line
 dat op_show_status
 dat op_verify
-dat 0 ; No op 14; it's the first byte of the extended opcode.
+; No op 14; it's the first byte of the extended opcode.
+dat unrecognized_opcode
 dat op_piracy
 
 
@@ -57,7 +58,7 @@ set a, 0 ; "failure"
 set pc, zstore
 
 :L0000 ; v5 illegal instruction
-set a, str_illegal_opcode
+set a, msg_illegal_opcode
 set pc, emit_native_string
 
 
@@ -80,11 +81,13 @@ set a, 0
 set pc, zstore
 
 :L0002 ; v5, illegal instruction
-set a, str_illegal_opcode
+set a, msg_illegal_opcode
 set pc, emit_native_string
 
 
 :op_restart
+; HACK: Pop the return address off the stack, to prevent deepening.
+set a, pop
 set pc, zrestart
 
 :op_ret_popped ; Pops from the stack and returns it.

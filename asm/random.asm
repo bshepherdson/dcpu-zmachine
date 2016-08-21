@@ -15,6 +15,7 @@ set [previous_random+1], a
 set pc, pop
 
 ; TODO: Seed from time after adding the clock hardware.
+; TODO: Or get the user to mash the keyboard when randomness is demanded.
 ; TODO: Initialize this by calling seed() from the init flow.
 
 ; Returns a number in the full integer range.

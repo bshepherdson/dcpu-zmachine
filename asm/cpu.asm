@@ -66,18 +66,32 @@ ifb x, 0x20
 
 
 :interp_VAR
-; TODO This is busted for the double-variable opcodes.
-; They need to be switched to read both type bytes first, then read the args.
 ; VAR has a following byte for the argument types.
 set [var_count], 0
-jsr read_var_arg_byte ; Bytes are filled in, no return value.
+jsr rbpc ; Read the type byte into A.
 and x, 31 ; Opcode is bottom 5 bits.
 
 ; Special case: the double-var opcodes call_vs2 (12) and call_vn2 (26)
 ife x, 12
-  jsr read_var_arg_byte
+  set pc, L4030
 ife x, 26
-  jsr read_var_arg_byte
+  set pc, L4030
+
+set pc, L4031
+
+:L4030 ; Handle the double-var opcodes.
+set push, a ; Save the first type byte.
+jsr rbpc ; Read the second one.
+set b, pop
+set push, a ; Swap them, saving the second one to the stack.
+set a, b
+jsr consume_var_arg_byte ; Read the first byte.
+
+set a, pop ; And load A with the second one, to be loaded below.
+; Fall through to L4031 below.
+
+:L4031
+jsr consume_var_arg_byte ; Bytes are filled in, no return value.
 
 ; Either way, carry on now.
 set c, x
@@ -88,7 +102,8 @@ set pc, [c + ops_var]
 ; Variable-form 2OP instructions.
 :interp_variable_2op
 set [var_count], 0
-jsr read_var_arg_byte
+jsr rbpc ; A = arg byte
+jsr consume_var_arg_byte
 ; Now the opcode is in the bottom 5 bits.
 set c, x
 and c, 31
@@ -103,7 +118,8 @@ jsr rbpc
 set x, a
 ; Now it's the same as variable form.
 set [var_count], 0
-jsr read_var_arg_byte
+jsr rbpc ; A is now the arg type byte
+jsr consume_var_arg_byte
 set c, x
 set x, pop
 set pc, [c + ops_extended]
@@ -122,8 +138,7 @@ add b, 1
 set [var_count], b
 set pc, pop
 
-:read_var_arg_byte
-jsr rbpc
+:consume_var_arg_byte ; (type byte)
 set push, y
 set y, a ; Y is now the type byte
 shr a, 6
@@ -349,7 +364,7 @@ set pc, pop
 
 
 
-; Copies C words from A to B.
+; Copies C words from A to B, forward.
 :move ; (from, to, len) -> void
 ife c, 0
   set pc, pop
@@ -358,6 +373,66 @@ add a, 1
 add b, 1
 sub c, 1
 set pc, move
+
+; Works with byte addresses, copying bytes. Copies forward.
+:zmove ; (from, to, len) -> void
+set push, x
+set push, y
+set push, z
+set x, a
+set y, b
+set z, c
+
+:L80
+ife z, 0
+  set pc, L81
+set a, x
+jsr rbba
+set b, a
+set a, y
+jsr wbba
+add x, 1
+add y, 1
+sub z, 1
+set pc, L80
+
+:L81
+set z, pop
+set y, pop
+set x, pop
+set pc, pop
+
+
+; Works with byte addresses, copying bytes. Copies backward.
+:zmove_rev ; (from, to, len) -> void
+set push, x
+set push, y
+set push, z
+set x, a
+add x, c
+set y, b
+add y, c
+set z, c
+
+; Now the addresses are 1 higher than they should be, so subtract first.
+:L90
+ife z, 0
+  set pc, L91
+sub x, 1
+sub y, 1
+sub z, 1
+set a, x
+jsr rbba
+set b, a
+set a, y
+jsr wbba
+set pc, L90
+
+:L91
+set z, pop
+set y, pop
+set x, pop
+set pc, pop
 
 
 ; Major function, responsible for calling routines.
@@ -435,18 +510,161 @@ jsr zstore
 set pc, pop
 
 
-:str_illegal_opcode .asciiz "[Illegal opcode]"
+:msg_illegal_opcode .asciiz "[Illegal opcode]"
+
+:unrecognized_opcode
+set a, msg_illegal_opcode
+set pc, emit_native_string
 
 
-; TODO Actually implement and move these.
-:ops_var DAT 0
-:ops_2op DAT 0
-:ops_extended DAT 0
-
-
-; TODO Move the load-from-disk code over here from main.
-; This is called when the Z-machine is ordered to restart, for example.
+; Called on startup, or if the Z-machine is ordered to restart.
 ; Needs to (re)load the dynamic memory, set the header accordingly, etc.
+; Never returns! It loops over interp forever.
 :zrestart
-sub pc, 1
+; Load the dynamic and static memory regions at memory_base.
+jsr load_low_mem
+; Set the version
+set a, header_version
+jsr rbba
+set [version], a
+
+jsr zrestart_flags1
+jsr zrestart_flags2
+jsr zrestart_interpreter_details
+jsr zrestart_screen_details
+jsr zrestart_colours
+jsr zrestart_standard_number
+
+:L4020
+jsr interp
+set pc, L4020
+
+:zrestart_flags1
+; Need to set up the header flags and fields.
+set a, header_flags1
+jsr rbba ; A is Flags 1
+
+ifg [version], 4
+  set pc, L190
+
+; v1-3: we set bits 4-6.
+; 4: Status line NOT available
+; 5: Screen-splitting available.
+; 6: Variable-pitch font by default
+; So we're setting them to 1, 0 and 0
+and a, 0x8f
+bor a, 0x10
+set b, a
+set a, header_flags1
+jsr wbba
+set pc, L191
+
+:L190 ; v4+ Flags 1
+; None of these special features are available - set it to 0.
+set b, 0
+set a, header_flags1
+jsr wbba
+; Fall through to L191
+
+:L191
+set pc, pop
+
+
+:zrestart_flags2
+; Game might set bits 3-8; None of which are supported. Set them all off.
+set a, header_flags2
+jsr rwba
+set b, a
+and b, 0x07 ; Preserve only the lower 3 bits.
+set a, header_flags2
+jsr wwba
+set pc, pop
+
+:zrestart_interpreter_details
+set a, header_interpreter_number
+set b, 6
+jsr wbba
+set a, header_interpreter_version
+set b, 65
+jsr wbba
+set pc, pop
+
+:zrestart_screen_details
+set a, header_screen_height_lines
+set b, screen_rows
+jsr wbba
+set a, header_screen_width_chars
+set b, screen_cols
+jsr wbba
+set a, header_screen_width_units
+set b, screen_cols
+jsr wwba
+set a, header_screen_height_units
+set b, screen_rows
+jsr wwba
+set a, header_font_width_units
+set b, 1
+jsr wbba
+set a, header_font_height_units
+set b, 1
+jsr wbba
+set pc, pop
+
+:zrestart_colours
+set a, header_default_fg_colour
+set b, 9 ; white
+jsr wbba
+set a, header_default_bg_colour
+set b, 2 ; black
+jsr wbba
+set pc, pop
+
+:zrestart_standard_number
+set a, header_standard_revision
+set b, 0
+jsr wwba
+set pc, pop
+
+
+; Loads the first sector of memory at memory_base, then determines how many
+; more to load and loads those too.
+:load_low_mem ; () -> void
+set push, x
+set push, y
+set push, z
+set a, 2    ; READ
+set x, 0
+set y, memory_base
+hwi [hw_disk]
+jsr await_disk_ready
+
+; Now I can read the base of hi memory.
+; header_himem happens to be word-sized and even, fortunately.
+set z, header_himem
+shr z, 1
+add z, memory_base
+set z, [z]
+; Round that up to a full sector (in bytes).
+add z, 1023
+; And then truncate to a number of sectors, not bytes.
+shr z, 10
+
+; The first is already loaded, so we set X to 1.
+set x, 1
+:L202
+set a, 2    ; READ
+add y, sector_size
+hwi [hw_disk]
+jsr await_disk_ready
+
+add x, 1
+ife x, z ; We've read the last sector.
+  set pc, L203
+set pc, L202
+
+:L203 ; Done loading sectors.
+set z, pop
+set y, pop
+set x, pop
+set pc, pop
 
