@@ -119,9 +119,156 @@ set pc, emit_native_string
 :msg_put_prop_not_found .asciiz "[put_prop: Property not found]"
 
 
-; TODO Implement me!
-:op_sread
-sub pc, 1
+; v1-4: no store or branch.
+; v5: store the terminating character (usually a newline)
+; TODO Support for "time" and "routine".
+:op_sread ; (text, parse, time, routine)
+ifl [version], 4
+  jsr v3_status_line
+
+; Now we read a line of text, storing the characters into text.
+; The max-length should already be in text[0].
+; In v5, the length actually read goes in text[1].
+; In v4, the text begins at [1] and is null-terminated.
+set a, [var_args]
+set b, read_line_v4
+ifg [version], 4
+  set b, read_line_v5
+jsr b ; Now the text buffer is populated properly, either way.
+; A holds the terminating character in v5, which we push for now.
+set push, a
+
+; If the parse value is 0, we're done.
+ife [var_args + 1], 0
+  set pc, L3050
+
+; Otherwise, do lexical analysis on the text, using the stock dictionary.
+set a, header_dictionary
+jsr rwba
+set c, a
+
+set push, x
+set a, [var_args]
+set b, [var_args + 1]
+set x, 0 ; Flag is always 0 for read.
+jsr lexical_scan ; Now the parse buffer is properly filled in.
+set x, pop
+
+:L3050 ; Stack holds the terminating character from read_line_v[45].
+; If we're in v5+ this is a store instruction.
+set a, pop
+ifg [version], 4
+  jsr zstore
+
+; Either way, we're done now.
+set pc, pop
+
+
+; TODO Implement this properly (currently a no-op).
+:v3_status_line ; () -> void
+set pc, pop
+
+; TODO: Support line editing.
+
+; A return value is expected here, but it's not used in versions under 5.
+; So we just let A be whatever here.
+:read_line_v4 ; (text) -> void
+set push, x
+set push, y
+set x, a
+add x, 1
+
+jsr rbba ; A is now the max-length.
+jsr read_line ; read_buffer is now populated and null-terminated.
+
+set y, read_buffer
+:L3060 ; Copy those bytes, including the null.
+set a, x
+set b, [y]
+jsr wbba
+ife [y], 0 ; If we just wrote the null
+  set pc, L3061 ; Then bail
+add x, 1
+add y, 1
+set pc, L3060
+
+:L3061
+set y, pop
+set x, pop
+set pc, pop
+
+
+:read_line_v5 ; (text) -> terminator
+set push, x
+set push, y
+set push, a ; Preserve the original text buffer.
+set x, a
+add x, 2
+
+jsr rbba ; A is now the max-length.
+jsr read_line ; read_buffer is now populated and null-terminated.
+
+set y, read_buffer
+:L3070 ; Copy those bytes, including the null.
+set a, x
+set b, [y]
+ife b, 0
+  set pc, L3071
+jsr wbba
+add x, 1
+add y, 1
+set pc, L3070
+
+:L3071
+; Store the length at text[1]
+set a, pop ; text
+add a, 1
+set b, y
+sub b, read_buffer ; That's the length in B.
+jsr wbba
+
+set y, pop
+set x, pop
+set a, 13 ; Always a return, here. TODO Not if we allow the time/routine stuff.
+set pc, pop
+
+
+; TODO Support line editing here, especially backspace.
+:read_line ; (max_length) -> void
+set [read_pointer], read_buffer
+:L3080
+jsr await_any_key ; A is the key.
+ife a, 13
+  set pc, L3081
+; Only store printable characters, in the range [32-126].
+ifl a, 32
+  set pc, L3080
+ifg a, 126
+  set pc, L3080
+
+; If we're still here, we've got a valid character.
+; Reduce uppercase letters to lowercase.
+ifg a, 64
+  ifl a, 0x4b
+    add a, 32
+; Now store and bump.
+set b, [read_pointer]
+set [b], a
+add [read_pointer], 1
+set pc, L3080
+
+:L3081 ; All done.
+set pc, pop
+
+
+:read_buffer .reserve 256
+:read_pointer dat read_buffer
+
+
+:op_print_char ; (char)
+set a, [var_args]
+set pc, emit
+
 
 :op_print_char ; (char)
 set a, [var_args]
@@ -170,6 +317,7 @@ set pc, write_variable
 :op_buffer_mode
 :op_output_stream
 :op_input_stream
+sub pc, 1
 
 
 :op_call_vs2
@@ -255,9 +403,65 @@ set pc, op_call_helper
 
 
 
-; TODO Implement these
-:op_tokenise
-:op_encode_text
+:op_tokenise ; (text, parse, opt_dictionary, opt_flag)
+set push, x
+; If the dictionary is not provided, use the default one.
+ifg [var_count], 2
+  set pc, L3030
+
+; Load the default dictionary.
+set a, header_dictionary
+jsr rwba
+set c, a
+set pc, L3031
+
+:L3030 ; Use the one from the var_args
+set c, [var_args + 2]
+; Fall through
+
+:L3031
+set x, 0 ; Default to the flag being false.
+ifg [var_count], 3
+  set x, [var_args + 3]
+
+set a, [var_args]
+set b, [var_args + 1]
+jsr lexical_scan
+set x, pop
+set pc, pop
+
+
+:op_encode_text ; (text, length, from, coded-text)
+set push, x
+
+set a, [var_args]
+set b, [var_args + 1]
+set c, [var_args + 2]
+jsr encode_word
+
+set a, [var_args + 3]
+set x, a
+set b, [encoded_words]
+jsr wwba
+
+set a, x
+add a, 1
+set b, [encoded_words + 1]
+jsr wwba
+
+; There's only a third word in v3+
+ifl [version], 4
+  set pc, L3040
+
+set a, x
+add a, 2
+set b, [encoded_words + 2]
+jsr wwba
+
+:L3040
+set x, pop
+set pc, pop
+
 
 :op_copy_table ; (src, dest, size)
 set push, x
@@ -300,6 +504,7 @@ set x, pop
 set pc, pop
 
 :op_print_table ; TODO Implement me.
+sub pc, 1
 
 :op_check_arg_count ; (count)
 set a, [zfp] ; Read the zfp

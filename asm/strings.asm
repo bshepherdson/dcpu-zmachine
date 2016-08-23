@@ -133,7 +133,7 @@ set pc, zstr_main
 :alphabet0 DAT "abcdefghijklmnopqrstuvwxyz"
 :alphabet1 DAT "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 :alphabet2 DAT 0, 0x13, "0123456789.,!?_#'", 34, "/\\-:()"
-
+:alphabets_top
 
 ; TODO If I care about V1 and 2, fix these.
 :special_chars
