@@ -29,18 +29,25 @@ DAT 0
 :zpc
 DAT 0, 0
 
+; A settable breakpoint, which will halt execution.
+:zbreak
+dat 0, 0x0
+
 ; 256-cell stack
-:stack .reserve 256
-:zsp dat stack+256
+:zsp dat stack_top
 :zfp dat 0
+:stack .reserve 256
+:stack_top
+dat 0xdead, 0xbeef ; Sentinels to guard against being overwritten.
 
 
 
 ; Treating the stack as full-descending, aka decrement-before-store
 :zpush ; (x) -> void
-sub [zsp], 1
 set b, [zsp]
+sub b, 1
 set [b], a
+set [zsp], b
 set pc, pop
 
 :zpop ; () -> x
@@ -53,6 +60,11 @@ set pc, pop
 :zpeek ; () -> x
 set a, [zsp]
 set a, [a]
+set pc, pop
+
+:zpeek_write ; (value) -> void
+set b, [zsp]
+set [b], a
 set pc, pop
 
 

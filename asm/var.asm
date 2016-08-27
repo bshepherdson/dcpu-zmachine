@@ -303,21 +303,155 @@ set pc, zpush
 jsr zpop ; A is now the value.
 set b, a
 set a, [var_args]
-set pc, write_variable
+ifn a, 0
+  set pc, write_variable
+set a, b
+set pc, zpeek_write
+
+; Splits the screen to give the upper window.
+; Unsplits when given 0.
+; The cursor is supposed to remain at the same absolute screen position.
+:op_split_window ; (lines)
+set [top_window_size], [var_args]
+set pc, pop
+
+:op_set_window ; (window)
+set a, [var_args]
+ife a, [window]
+  set pc, pop ; Nothing to do if we're already on that window.
+
+; When moving to the upper window, save the position and set the cursor to 0, 0.
+; When moving from the upper window to the lower window, restore the saved pos.
+ife a, window_bottom
+  set pc, L4070
+
+; Moving to the top window.
+set [saved_cursor_row], [cursor_row]
+set [saved_cursor_col], [cursor_col]
+set [cursor_row], 0
+set [cursor_col], 0
+set pc, pop
+
+; Moving to the bottom window.
+:L4070
+set [cursor_row], [saved_cursor_row]
+set [cursor_col], [saved_cursor_col]
+set pc, pop
+
+; Two special values: -1 means "unsplit-and-clear", -2 "clear without unsplit"
+:op_erase_window ; (window)
+set a, [var_args]
+ifu a, 0
+  set pc, L4080
+
+; Non-negative: erase one of the windows.
+set push, x
+set push, y
+set x, 0
+set y, [top_window_size] ; Set up for the top window.
+ife a, window_top ; Actually top window.
+  set pc, L4081
+
+; Bottom window.
+set x, [top_window_size]
+set y, screen_rows
+
+:L4081 ; Loop until X == Y
+ife x, y
+  set pc, L4082
+set a, x
+jsr clear_line
+add x, 1
+set pc, L4081
+
+:L4082 ; Done looping, window cleared, so bail.
+set y, pop
+set x, pop
+set pc, pop
+
+:L4080 ; Special cases.
+; The whole screen is always cleared.
+set push, a
+jsr clear_screen
+; But we unsplit when it's -1
+
+set a, pop
+ifn a, -1
+  set pc, pop ; Done.
+
+; If it is -1, then we reset the screen state as well.
+set [cursor_row], 0
+set [cursor_col], 0
+set [window], window_bottom
+set [top_window_size], 0
+set pc, pop
 
 
-; TODO Implement these window and I/O ops.
-:op_split_window
-:op_set_window
-:op_erase_window
-:op_erase_line
-:op_set_cursor
-:op_get_cursor
-:op_set_text_style
-:op_buffer_mode
+; Erasing from the current position to the end of the line.
+; If the value is anything other than 1, do nothing.
+:op_erase_line ; (value)
+ifn [var_args], 1
+  set pc, pop ; Do nothing if the argument is not 1.
+
+; Otherwise erase to EOL, without moving the cursor.
+set pc, erase_to_eol
+
+
+; Numbers from (1,1) in the top-left. Relative to the current window!
+:op_set_cursor ; (line, column)
+set a, [var_args]
+sub a, 1
+set b, [var_args+1]
+sub b, 1
+ife [window], window_bottom
+  add a, [top_window_size]
+set [cursor_row], a
+set [cursor_col], b
+set pc, pop
+
+; Expects the current row (1-based, relative to the selected window) in to [0],
+; and the column (1-based) in to [1].
+:op_get_cursor ; (array)
+set a, [var_args]
+
+set b, [cursor_row]
+add b, 1
+ife [window], window_bottom
+  add b, [top_window_size]
+jsr wwba
+
+set a, [var_args]
+add a, 2
+set b, [cursor_col]
+add b, 1
+jsr wwba
+set pc, pop
+
+
+; When the style is 0, all styles are deactivated (Roman).
+; If it's nonzero, it's combined with the existing styles.
+:op_set_text_style ; (style)
+set a, [var_args]
+ife a, 0
+  set pc, L6090
+; Nonzero, merge it in.
+bor [text_style], a
+set pc, pop
+:L6090
+set [text_style], 0
+set pc, pop
+
+; TODO Support word wrap, and enable this function.
+:op_buffer_mode ; Do nothing; word wrap isn't currently supported anyway.
+set pc, pop
+
+; Do nothing; there's only one supported stream.
+; TODO Support this properly.
 :op_output_stream
+set pc, pop
+
 :op_input_stream
-sub pc, 1
+set pc, pop
 
 
 :op_call_vs2
@@ -518,4 +652,28 @@ ifl b, a ; If the requested arg was provided.
 set a, c
 set pc, zbranch
 
+
+; Real variable flavour of this opcode.
+:op_je_var ; (...)
+set a, [var_args]
+set b, var_args+1
+set c, [var_count]
+sub c, 1
+
+:L4200
+ife c, 0
+  set pc, L4201
+ife a, [b]
+  set pc, L4202
+sub c, 1
+add b, 1
+set pc, L4200
+
+:L4202 ; Found the match.
+set a, 1
+set pc, zbranch
+
+:L4201 ; Failed to find anything.
+set a, 0
+set pc, zbranch
 

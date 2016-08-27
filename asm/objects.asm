@@ -5,7 +5,7 @@
 :zobj_offset_sibling dat 5
 :zobj_offset_child   dat 6
 :zobj_offset_props   dat 7
-:zobj_defaults_table_size dat 31
+:zobj_defaults_table_size dat 62 ; 31 words
 :zobj_entry_size     dat 9
 
 ; Based on the version, configures the various version-dependent properties.
@@ -16,7 +16,7 @@ set [zobj_offset_parent], 6
 set [zobj_offset_sibling], 8
 set [zobj_offset_child], 10
 set [zobj_offset_props], 12
-set [zobj_defaults_table_size], 63
+set [zobj_defaults_table_size], 126 ; 63 words
 set [zobj_entry_size], 14
 set pc, pop
 
@@ -136,7 +136,7 @@ jsr zobj_addr ; Now A is the parent's address.
 ; Two cases: Target object is either the immediate child of the parent, or a
 ; sibling of some other child.
 set push, a
-add a, [zobj_offset_child]
+set b, [zobj_offset_child]
 jsr zobj_read_relative ; A is now the child's number.
 ife a, [sp+2] ; Stack is now ( ... number address parent_address )
   set pc, L311 ; I'm the direct child
@@ -197,6 +197,7 @@ jsr zobj_write_relative
 set a, peek
 set b, [zobj_offset_sibling]
 set c, 0
+jsr zobj_write_relative
 ; Fall through to L310 below for cleanup.
 
 :L310 ; Removing the saved number and address from the stack, and returning.
@@ -285,7 +286,7 @@ set push, y
 set push, b
 jsr zobj_attr_byte ; A is now the byte address for the byte.
 set x, a
-set a, peek ; Grab the attr number again.
+set a, pop ; Grab the attr number again.
 jsr zobj_attr_mask ; A is now the mask.
 set y, a  ; And Y is the mask.
 
@@ -306,7 +307,7 @@ set push, y
 set push, b
 jsr zobj_attr_byte ; A is now the byte address for the byte.
 set x, a
-set a, peek ; Grab the attr number again.
+set a, pop ; Grab the attr number again.
 jsr zobj_attr_mask ; A is now the mask.
 xor a, -1 ; Invert the mask.
 set y, a  ; And Y is the mask.
@@ -358,7 +359,6 @@ set pc, pop
 set push, x
 set push, z
 set z, b ; Save the prop number in Z
-add a, [zobj_offset_props]
 jsr zobj_first_prop ; A is now the address of the first property.
 set x, a ; And keep the current property entry in X.
 

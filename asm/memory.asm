@@ -53,10 +53,10 @@ set x, a
 shr x, 1
 set c, [x+memory_base]
 set y, 255
-ifc a, 1   ; When low byte,
+ifb a, 1   ; When even/high byte,
   shl y, 8 ; Shift the mask up
 and c, y   ; Mask out the part I'm replacing.
-ifb a, 1   ; When high byte,
+ifc a, 1   ; When high byte,
   shl b, 8 ; Shift the value up.
 bor b, c
 set [x+memory_base], b
@@ -91,6 +91,16 @@ set pc, pop
 ; Now adding the complex disk caching scheme.
 ; With 512 words per sector, each one is 0x200 long, so 8 is 0x1000.
 ; I'll guess I can get away with 0x2000 = 16 sectors of cache.
+
+; A 32-bit long address specifies a byte in the final file. To turn that into a
+; sector number and DCPU word address, it looks like this:
+; 01234567 89abcdef 01234567 89abcdef
+; 00000000 0000ssss ssssssoo ooooooo_
+; which is 10 bits of sector and 9 of word.
+
+; To actually split it up, I'll shift the upper word up by 6, shift the lower
+; down by 10, and BOR them together for the sector number.
+; Shifting right by 1 and AND 0x1ff gives the offset.
 
 .def cache_count, 16
 .def sector_size, 512
@@ -163,8 +173,8 @@ ife a, 0
 ; Need to do the full range.
 ; Convert to the (sector, DCPU word offset) arguments for read_sector.
 set push, b
-shr b, sector_shift
-shl a, 5
+shr b, sector_shift + 1
+shl a, 6
 bor a, b
 set b, peek
 shr b, 1
@@ -214,6 +224,7 @@ set x, a ; Save the byte.
 shl x, 8 ; Shift it up.
 set b, pop
 set a, pop
+add b, 1
 jsr rbla
 bor a, x
 set x, pop

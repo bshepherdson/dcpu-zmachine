@@ -1,13 +1,17 @@
 .include asm/core.asm
 .include asm/memory.asm
+.include asm/random.asm
 .include asm/cpu.asm
 .include asm/0op.asm
 .include asm/1op.asm
 .include asm/2op.asm
 .include asm/var.asm
+.include asm/ext.asm
 .include asm/strings.asm
+.include asm/dictionary.asm
 .include asm/objects.asm
 .include asm/screen.asm
+.include asm/debug.asm
 
 :hw_display dat 0
 :hw_disk dat 0

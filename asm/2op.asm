@@ -137,7 +137,12 @@ set pc, zobj_set_attr
 set pc, zobj_clear_attr
 
 :op_store ; (var_num, value)
-set pc, write_variable
+ifn a, 0
+  set pc, write_variable
+; Special case for 0 = SP. It means to overwrite TOS, not push.
+set a, [zsp]
+set [a], b
+set pc, pop
 
 :op_insert_obj ; (target, destination)
 set pc, zobj_insert_child
@@ -202,12 +207,16 @@ sub b, 1
 shl b, 1 ; B is now the offset into the table.
 add a, b
 jsr rwba
-set pc, pop ; Returning the default for this property number.
+set pc, zstore ; Store the default for this property number.
 
 
 :op_get_prop_addr ; (obj_num, prop_num)
+set push, b
+jsr zobj_addr
+set b, pop
 jsr zobj_get_prop
-jsr zobj_prop_data
+ifn a, 0
+  jsr zobj_prop_data ; If it's 0, just leave it as 0.
 set pc, zstore
 
 :op_get_next_prop ; (obj_num, prop_num)

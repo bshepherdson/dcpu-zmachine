@@ -1,12 +1,24 @@
 ; Core CPU processing parts.
 ; Decoding instructions and the like.
 
+; Spins forever, but makes it relatively easy to jump back out.
+:pause
+sub pc, 1
+set pc, pop
 
 
 :interp ; () -> void
+ife [zpc], [zbreak]
+  ife [zpc+1], [zbreak+1]
+    jsr pause
+
 set push, x
 jsr rbpc
 set x, a ; X = opcode
+
+ife x, 190
+  ifg [version], 4
+    set pc, interp_extended
 
 shr a, 6
 and a, 3 ; Just the top 2 bits.
@@ -14,9 +26,6 @@ ife a, 3
   set pc, interp_variable
 ife a, 2
   set pc, interp_short
-ife x, 190
-  ifg [version], 4
-    set pc, interp_extended
 
 :interp_long
 ; Operand count in long form is always 2OP.
@@ -61,14 +70,18 @@ set pc, [c + ops_0op]
 
 
 :interp_variable
-ifb x, 0x20
-  set pc, interp_variable_2op
+ifc x, 0x20
+  ifn x, 0xc1 ; Treat the multi-arg je as a proper VAR.
+    set pc, interp_variable_2op
 
 
 :interp_VAR
 ; VAR has a following byte for the argument types.
 set [var_count], 0
 jsr rbpc ; Read the type byte into A.
+ife x, 0xc1 ; Special case for multi-arg je.
+  set pc, je_special_case
+
 and x, 31 ; Opcode is bottom 5 bits.
 
 ; Special case: the double-var opcodes call_vs2 (12) and call_vn2 (26)
@@ -98,6 +111,11 @@ set c, x
 set x, pop
 set pc, [c + ops_var]
 
+
+:je_special_case
+set x, pop
+jsr consume_var_arg_byte
+set pc, op_je_var
 
 ; Variable-form 2OP instructions.
 :interp_variable_2op
@@ -185,7 +203,7 @@ set pc, read_variable
 :read_variable ; (var) -> value
 ife a, 0
   set pc, zpop ; Tail-call to popping the stack.
-ifg a, 16
+ifg a, 15
   set pc, read_global
 ; Fall through to read_local
 
@@ -202,6 +220,7 @@ set pc, pop
 :local_address ; (number) -> real_address
 set b, [zfp]
 add b, a
+set a, b
 set pc, pop
 
 
@@ -233,7 +252,7 @@ set pc, write_variable
 :write_variable ; (var, value) -> void
 ife a, 0
   set pc, write_stack
-ifg a, 16
+ifg a, 15
   set pc, write_global
 ; Fall through the write_local
 :write_local ; (var, value) -> void
@@ -264,12 +283,16 @@ jsr rbpc ; A is now the first byte of the branch offset.
 ; We xor the top bit with the condition - if they match (0) we jump.
 set c, a
 and c, 0x80
-xor peek, c ; TOS is the jump flag. If it's 0, branch. NB: inverted!
+set b, pop
+and b, 0x80
+xor c, b
+set push, c ; TOS is the jump flag. If it's 0, branch. NB: inverted!
 
 ifb a, 0x40
   set pc, L50
 
 ; Long form (remember signed)
+set push, a
 jsr rbpc
 set b, pop
 shl b, 8
@@ -280,10 +303,13 @@ ifb a, 0x2000 ; Convert 14-bit signed to 16-bit signed.
 set pc, L51
 
 :L50 ; Short form (bottom 6 bits)
-set a, pop
-and a, 0x63
+and a, 0x3f
 
-:L51 ; Actual code
+:L51 ; Actual code. A is the signed offset. TOS is the jump flag.
+; That flag is 0 when we should jump, nonzero when we should bail.
+ifn 0, pop
+  set pc, pop
+
 ; First, two special cases. 0 means return false, 1 means return true.
 ifc a, 0xfffe ; Only bit 1 is set, if any.
   set pc, L52
@@ -383,9 +409,9 @@ set x, a
 set y, b
 set z, c
 
-:L80
+:L800
 ife z, 0
-  set pc, L81
+  set pc, L801
 set a, x
 jsr rbba
 set b, a
@@ -394,9 +420,9 @@ jsr wbba
 add x, 1
 add y, 1
 sub z, 1
-set pc, L80
+set pc, L800
 
-:L81
+:L801
 set z, pop
 set y, pop
 set x, pop
@@ -463,7 +489,7 @@ set [zfp], b
 ; Let's store the old values while we've got B = FP
 set [b + index_old_sp], [zsp]
 set [b + index_old_pc_lo], j
-set [b + index_old_pc_lo], i
+set [b + index_old_pc_hi], i
 set [b + index_return_expected], y
 set y, pop    ; Use Y for the argument count now.
 set [b + index_arg_count], y
@@ -534,6 +560,9 @@ jsr zrestart_interpreter_details
 jsr zrestart_screen_details
 jsr zrestart_colours
 jsr zrestart_standard_number
+jsr zrestart_init_pc
+
+jsr init_object_system
 
 :L4020
 jsr interp
@@ -625,6 +654,13 @@ set b, 0
 jsr wwba
 set pc, pop
 
+:zrestart_init_pc
+set a, header_initial_pc
+jsr rwba
+set [zpc], 0
+set [zpc+1], a
+set pc, pop
+
 
 ; Loads the first sector of memory at memory_base, then determines how many
 ; more to load and loads those too.
@@ -644,6 +680,7 @@ set z, header_himem
 shr z, 1
 add z, memory_base
 set z, [z]
+set [memory_top], z ; Set the global, for use by rb_la et al.
 ; Round that up to a full sector (in bytes).
 add z, 1023
 ; And then truncate to a number of sectors, not bytes.

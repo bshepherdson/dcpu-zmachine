@@ -195,14 +195,9 @@ set pc, print_la
 set a, [zpc]
 set b, [zpc+1]
 jsr print_la
-
-; zstr_ptr is now aimed at the last word, the one with the top bit set.
-set a, [zstr_ptr]
-set b, [zstr_ptr+1]
-add b, 2
-add a, ex
-set [zpc], a
-set [zpc+1], b
+; zstr_ptr is now aimed after the last word, which is where PC should continue.
+set [zpc], [zstr_ptr]
+set [zpc+1], [zstr_ptr+1]
 set pc, pop
 
 :print_ba ; (ba) -> void
@@ -220,6 +215,4 @@ set [zstr_index], 0 ; This will cause zstr_next to read the string properly.
 set [zstr_word], 0  ; Gotta make sure the top bit is clear.
 set [shift], 0
 set pc, zstr_main
-
-:print_pc
 

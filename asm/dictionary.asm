@@ -63,7 +63,7 @@ jsr push_char
 set a, pop
 and a, 0x1f
 jsr push_char
-set pc, L006 ; Jump to the closer.
+set pc, L5006 ; Jump to the closer.
 
 :L5005 ; B is the address of the character.
 sub b, alphabet2
@@ -318,7 +318,7 @@ set b, [lex_text]
 set pc, [lex_state + lex_action_eof]
 
 :lex_process_char ; (char, ba)
-ife a, ' '
+ife a, 32
   set pc, [lex_state + lex_action_space]
 
 ; Check each of the dictionary terminators.
