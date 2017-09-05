@@ -341,50 +341,7 @@ set pc, pop
 ; Two special values: -1 means "unsplit-and-clear", -2 "clear without unsplit"
 :op_erase_window ; (window)
 set a, [var_args]
-ifu a, 0
-  set pc, L4080
-
-; Non-negative: erase one of the windows.
-set push, x
-set push, y
-set x, 0
-set y, [top_window_size] ; Set up for the top window.
-ife a, window_top ; Actually top window.
-  set pc, L4081
-
-; Bottom window.
-set x, [top_window_size]
-set y, screen_rows
-
-:L4081 ; Loop until X == Y
-ife x, y
-  set pc, L4082
-set a, x
-jsr clear_line
-add x, 1
-set pc, L4081
-
-:L4082 ; Done looping, window cleared, so bail.
-set y, pop
-set x, pop
-set pc, pop
-
-:L4080 ; Special cases.
-; The whole screen is always cleared.
-set push, a
-jsr clear_screen
-; But we unsplit when it's -1
-
-set a, pop
-ifn a, -1
-  set pc, pop ; Done.
-
-; If it is -1, then we reset the screen state as well.
-set [cursor_row], 0
-set [cursor_col], 0
-set [window], window_bottom
-set [top_window_size], 0
-set pc, pop
+set pc, erase_window ; Tail call.
 
 
 ; Erasing from the current position to the end of the line.

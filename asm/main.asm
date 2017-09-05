@@ -11,18 +11,26 @@
 .include asm/dictionary.asm
 .include asm/objects.asm
 .include asm/screen.asm
-.include asm/debug.asm
+;.include asm/lem.asm
+;.include asm/printer.asm
+.include asm/imva.asm
+;.include asm/debug.asm
 
-:hw_display dat 0
-:hw_disk dat 0
-:hw_keyboard dat 0
+:hw_display dat -1
+:hw_disk dat -1
+:hw_keyboard dat -1
+:hw_printer dat -1
+:hw_imva dat -1
 
 :main
 jsr detect_hardware
+jsr check_hardware
+jsr choose_display
 jsr setup_interrupts
 jsr init_screen
 jsr await_disk_inserted
-set pc, zrestart
+set pc, dump_all_strings
+;set pc, zrestart
 
 
 :str_insert_disk .asciiz "Insert a story disk"
@@ -116,15 +124,27 @@ set pc, pop
 .def device_size, 5
 :device_table
 ; Generic keyboard
-dat 0,      0,      0x30cf, 0x7406, hw_keyboard
-; LEM1802 display - "new" ID
+dat 0,      0,      0x30c1, 0x7406, hw_keyboard
+; LEM1802 display - "new" ID (TC IDs)
 dat 0x1c6c, 0x8b36, 0x734d, 0xf615, hw_display
-; LEM1802 display - "old" ID -- TODO What's the difference between them?
+; LEM1802 display - "old" ID (Notch's original spec)
 dat 0x1c6c, 0x8b36, 0x7349, 0xf615, hw_display
 ; M35fd floppy drive
 dat 0x1eb3, 0x7e91, 0x4fd5, 0x24c5, hw_disk
+; HSDP-1D printer
+dat 0xf697, 0x6d00, 0xcff2, 0xa11d, hw_printer
+; IMVA display
+dat 0x59ea, 0x5742, 0x75f6, 0xa113, hw_imva
 :device_table_end
 
+
+; Configures the display API vtable for the device we care about.
+; TODO: Prefer the IMVA once we support it.
+; Prefers IMVA over printer, and printer over LEM.
+; The LEM is too narrow at 32 characters for most games to work.
+:choose_display ; ()
+set pc, display_configure ; Each display implementation sets this constant.
+; Tail call it and done.
 
 ; Sets up interrupt handler and enables interrupts for all devices we care to
 ; watch for interrupts.
@@ -194,6 +214,28 @@ set pc, pop
 
 
 
+; Checks for the required hardware devices, and wedges on a breakpoint if one is
+; lacking.
+:check_hardware ; () -> void
+ife [hw_disk], -1
+  brk 97
+ife [hw_keyboard], -1
+  brk 98
+
+; Any of these displays suffices.
+ifn [hw_display], -1
+  set pc, check_hardware_display_found
+ifn [hw_printer], -1
+  set pc, check_hardware_display_found
+ifn [hw_imva], -1
+  set pc, check_hardware_display_found
+
+; If we get here, then there's no display device!
+brk 99
+
+:check_hardware_display_found
+set pc, pop
+
 ; TESTING
 ; Dumps all strings in the system, one at a time.
 ; Waits for any keystroke, then clears the screen and prints the next one.
@@ -207,6 +249,8 @@ ife x, zm_string_table_top
 ; Step 1: Print-paddr the string.
 set a, [x]
 jsr print_paddr
+brk 1
+jsr new_line
 ; Step 2: Await a keystroke.
 jsr await_any_key
 jsr clear_screen
